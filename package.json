@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "name": "passenger",
+  "module": "./src/cli/cli.ts",
+  "type": "module",
+  "devDependencies": {
+    "bun-types": "^0.5.0",
+    "@types/yargs": "17.0.24"
+  },
+  "scripts": {
+    "start": "bun run ./src/cli/cli.ts --help",
+    "build": "bun build --compile ./src/cli/cli.ts --outfile passenger-$npm_package_version"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "file-system-cache": "^2.4.4",
+    "jira.js": "^2.19.1",
+    "openai": "^4.0.1",
+    "yargs": "17.7.2"
+  }
+}
