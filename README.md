@@ -34,3 +34,18 @@ Passenger refines the synergy between software testing and business objectives. 
 - **Automated Testing:** With Passenger's automation prowess, the days of manual test writing are behind us.
 - **Efficient Development Cycle:** By identifying and rectifying discrepancies early, we streamline the development process, reducing back-and-forths. That no only let you push back to the business but let the code focus in on the solution.
 - **Transparent Alignment:** A clear, concise overview of how your code aligns with business objectives, beneficial for both technical strategists and project stakeholders.
+
+### Environment setup
+
+Use the following
+
+#### Using Jira Connector? (because thats all we support right now)
+
+Here are the required environment variables to place in an `.env` file or equivilent inline passing environment variables.
+
+```txt
+OPENAI_API_KEY=""
+JIRA_HOST="https://amalgam.atlassian.net"
+JIRA_USER_EMAIL="user@example.com"
+JIRA_API_TOKEN=""
+```
