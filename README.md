@@ -35,11 +35,11 @@ Passenger refines the synergy between software testing and business objectives. 
 - **Efficient Development Cycle:** By identifying and rectifying discrepancies early, we streamline the development process, reducing back-and-forths. That no only let you push back to the business but let the code focus in on the solution.
 - **Transparent Alignment:** A clear, concise overview of how your code aligns with business objectives, beneficial for both technical strategists and project stakeholders.
 
-### Environment setup
+## Environment setup
 
 Use the following
 
-#### Using Jira Connector? (because thats all we support right now)
+### Using Jira Connector? (because thats all we support right now)
 
 Here are the required environment variables to place in an `.env` file or equivilent inline passing environment variables.
 
