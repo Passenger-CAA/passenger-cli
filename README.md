@@ -45,16 +45,16 @@ _(because thats all we support right now)_
 
 Here are the required environment variables to place in an `.env` file or equivilent inline passing environment variables.
 
+### Costs
+
+With pay as you go, it seems to cost 0.0001 dolars so far I have not been charged for the API access, I think for a larger team you can expect a cost from OpenAI and thats a price you might consider worth while considering all of the agrovation this tool will save you, business and developer alignment has always been a problem and tests can be wrote wrong, this tool will spare all of that. I think depending on how good Passenger becomes the benifits will quickly outway the costs.
+
 ### Requirements
 
 - bun (probably but we will be removing that barier soon)
 - openAI with api key and billing setup
 - an existing file with a solution for a ticket, wrote in any programming language, see ./docs/example
 - A jira account, a project and a ticket to compare
-
-### Costs
-
-With pay as you go, it seems to cost 0.0001 dolars so far I have not been charged for the API access, I think for a larger team you can expect a cost from OpenAI and thats a price you might consider worth while considering all of the agrovation this tool will save you, business and developer alignment has always been a problem and tests can be wrote wrong, this tool will spare all of that. I think depending on how good Passenger becomes the benifits will quickly outway the costs.
 
 ```txt
 OPENAI_API_KEY=""
