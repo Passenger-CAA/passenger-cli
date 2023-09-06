@@ -36,7 +36,7 @@ export class JiraConnector {
     // Cache here
     const cachedIssueResponse = await this.cacheMixin.get(issue.key);
     if (cachedIssueResponse) {
-      console.log("retrieve from cache");
+      console.log("C:");
       return cachedIssueResponse;
     }
 
@@ -49,7 +49,7 @@ export class JiraConnector {
       ),
     };
 
-    console.log("fresh get");
+    console.log("N:");
     await this.cacheMixin.set(issue.key, issueObject);
 
     return issueObject;

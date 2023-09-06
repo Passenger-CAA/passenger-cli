@@ -1,5 +1,5 @@
 {
-  "version": "0.0.1",
+  "version": "0.2.1",
   "name": "passenger",
   "module": "./src/cli/cli.ts",
   "type": "module",
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "bun run ./src/cli/cli.ts --help",
-    "build": "bun build --compile ./src/cli/cli.ts --outfile passenger-$npm_package_version"
+    "build": "bun build --compile ./src/cli/cli.ts --outfile passenger-$npm_package_version && mv passenger-$npm_package_version ./target"
   },
   "dependencies": {
     "dotenv": "^16.3.1",

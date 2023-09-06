@@ -7,7 +7,7 @@ import { scoreFile } from "../lib/lib";
 yargs(hideBin(process.argv))
   .command(
     "score [issue] [file]",
-    "Score your files against an issue.",
+    "Score a file against an issue.",
     (yargs) => yargs,
     async (argv) => {
       const ensuredFileArray: string[] = Array.isArray(argv.file)
