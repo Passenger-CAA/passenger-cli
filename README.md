@@ -39,7 +39,9 @@ Passenger refines the synergy between software testing and business objectives. 
 
 Use the following
 
-### Using Jira Connector? (because thats all we support right now)
+### Using Jira Connector?
+
+_(because thats all we support right now)_
 
 Here are the required environment variables to place in an `.env` file or equivilent inline passing environment variables.
 
