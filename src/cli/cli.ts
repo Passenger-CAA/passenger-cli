@@ -2,7 +2,10 @@
 
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { scoreFile } from "../lib/lib";
+import { initializeIssueTracker, scoreFile } from "../lib/lib";
+
+const issueTrackerSystemSelection = process.env.ISSUE_TRACKER_SYSTEM;
+const issueTrackingSystem = initializeIssueTracker(issueTrackerSystemSelection as any);
 
 yargs(hideBin(process.argv))
   .command(
@@ -20,6 +23,7 @@ yargs(hideBin(process.argv))
 
       for (const file of ensuredFileArray) {
         await scoreFile({
+          issueTrackingSystem,
           issue: argv.issue as string,
           file,
         });

@@ -1,25 +1,45 @@
-export default class Connector {
-  id: string;
-  apiKeyName: string;
-  apiKeyValue: string | undefined;
+export interface IConfigurationValue {
+  value: string | undefined;
+  error: string;
+  optional?: boolean;
+}
 
-  constructor({ id, apiKeyName }: { id: string; apiKeyName: string }) {
-    this.id = id;
-    this.apiKeyName = apiKeyName;
+export default class Connector<T extends string> {
+  private id: string;
+  #configurations: Record<T, string> = {} as any;
+
+  constructor(options: { id: string }) {
+    this.id = options.id;
+  }
+
+  validateConfigurations(configurations: Record<T, IConfigurationValue>): void {
+    Object.keys(configurations).forEach((key) => {
+      const { value, error, optional } = configurations[key as T];
+      if (!value && !optional) {
+        throw new Error(error || `Configuration for ${key} is missing`);
+      }
+    });
+  }
+
+  setConfigurations(configurations: Record<T, IConfigurationValue>): void {
+    Object.keys(configurations).forEach((key) => {
+      const { value } = configurations[key as T];
+      if (value !== undefined) {
+        this.#configurations[key as T] = value;
+      }
+    });
+  }
+
+  getConfiguration(key: T): string {
+    return this.#configurations[key];
   }
 
   /**
-   * Initializes the API key from an environment variable.
-   *
-   * @param {string} keyName - The name of the environment variable containing the API key.
-   * @throws {Error} If the environment variable is not set.
+   * Logs messages to the console with the Connector instance's ID as a prefix.
+   * @param {...string} chunks - The message chunks to log.
    */
-  setAPIKeyFromEnv() {
-    if (!process.env[this.apiKeyName]) {
-      throw new Error(
-        `Please set the environment variable ${this.apiKeyName}.`
-      );
-    }
-    this.apiKeyValue = process.env[this.apiKeyName];
+  log(...chunks: string[]): void {
+    const formattedId = `[${this.id.toUpperCase()}]:`;
+    console.log(formattedId, ...chunks);
   }
 }

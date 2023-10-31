@@ -4,7 +4,9 @@
 
 ## Introduction
 
-Ever meticulously coded a solution, only to discover it wasn't addressing the core issue? That's where Passenger comes in.
+Have you ever meticulously coded a solution, only to discover it wasn't addressing the core issue? That's where Passenger comes in.
+
+Passenger is a Code-Alignment Assistant (CAA) the first in its class, crafted with the belief in a harmonious co-working future between AI and developers. Our tool enhances development workflows, ensuring code consistency with project issues and fostering a collaborative environment where AI and human intelligence complement each other.
 
 Passenger refines the synergy between software testing and business objectives. By converting both tickets and code into a comparable medium, we ensure that every piece of development is in harmony with business needs. The endgame? Say goodbye to manual test writing, embracing both efficiency and precision, getting advice as you develop your solution your way.
 
@@ -47,18 +49,41 @@ Here are the required environment variables to place in an `.env` file or equivi
 
 ### Costs
 
-With pay as you go, it seems to cost 0.0001 dolars so far I have not been charged for the API access, I think for a larger team you can expect a cost from OpenAI and thats a price you might consider worth while considering all of the agrovation this tool will save you, business and developer alignment has always been a problem and tests can be wrote wrong, this tool will spare all of that. I think depending on how good Passenger becomes the benifits will quickly outway the costs.
+_To get the best accuracy, we use GPT-4_, **This requires a billing account** and at-least `$1` credit. From our initial tests with pay as you go, it seems to cost 0.0001 dolars so far I have not been charged for the API access, I think for a larger team you can expect a cost from OpenAI and thats a price you might consider worth while considering all of the agrovation this tool will save you, business and developer alignment has always been a problem and tests can be wrote wrong, this tool will spare all of that. I think depending on how good Passenger becomes the benifits will quickly outway the costs.
 
 ### Requirements
 
 - bun (probably but we will be removing that barier soon)
-- openAI with api key and billing setup
-- an existing file with a solution for a ticket, wrote in any programming language, see ./docs/example
-- A jira account, a project and a ticket to compare
+- OpenAI paid account with atleast $1 credit and api key and billing setup
+- an existing file with a solution for an issue, this can be wrote in any programming language, see ./docs/example
+- A (jira/github with issues) account 
+- a project and a issue to compare
 
-```txt
+#### For GitHub install
+
+1. Please add the Github App to your organization or specific repo(s) its **a simple one click secure way to connect.**
+[Passenger Code-Alignment Assistant App](https://github.com/apps/passenger-caa)
+
+2. Add and populate the following environment variables
+```toml
+ISSUE_TRACKER_SYSTEM='github'
+OPENAI_API_KEY=""
+# Github only
+GITHUB_OWNER="adam-cyclones"
+GITHUB_REPO="passenger"
+# The private key you generated using the GitHub app https://github.com/apps/passenger-caa
+GITHUB_PRIVATE_KEY_PATH="path/to/github-app-pem-passenger-cca.pem"
+# *optional* Save a request speeds things up a tiny bit
+GITHUB_INSTALLATION_ID="123456789" 
+
+```
+
+#### For Jira install
+```toml
+ISSUE_TRACKER_SYSTEM='jira'
 OPENAI_API_KEY=""
 JIRA_HOST="https://amalgam.atlassian.net"
 JIRA_USER_EMAIL="user@example.com"
 JIRA_API_TOKEN=""
 ```
+
