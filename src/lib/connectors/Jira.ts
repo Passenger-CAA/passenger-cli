@@ -1,66 +1,46 @@
-import Connector from "../mixins/Connector";
-import { Version3Client } from "jira.js";
-import { extractTextFromProseMirrorJSON } from "../utils/customProseParser";
+import Connector, { IConfigurationValue } from "../mixins/Connector";
 import { Cache } from "../mixins/Cache";
 import { Cache as FileSystemCache } from "file-system-cache";
+import { Version3Client } from "jira.js";
+import { extractTextFromProseMirrorJSON } from "../utils/customProseParser";
+
+type RequiredEnvVars = 'JIRA_USER_EMAIL' | 'JIRA_HOST' | 'JIRA_API_TOKEN';
 
 export class JiraConnector {
-  jiraUserEmailKeyName: string = "JIRA_USER_EMAIL";
-  jiraHostKeyName: string = "JIRA_HOST";
-  jiraApiKeyName: string = "JIRA_API_TOKEN";
-  jiraHost: string | undefined;
-  jiraEmail: string | undefined;
   id: string = "jira";
-  connectorMixin!: Connector;
+  connectorMixin!: Connector<RequiredEnvVars>;
   cacheMixin!: FileSystemCache;
+  client!: Version3Client;
 
   constructor() {
     this.connectorMixin = new Connector({
-      id: this.id,
-      apiKeyName: this.jiraApiKeyName,
+      id: this.id
     });
     this.cacheMixin = new Cache();
-    this.connectorMixin.setAPIKeyFromEnv();
-    // Specific to Jira
-    this.jiraEmail = process.env[this.jiraUserEmailKeyName];
-    this.jiraHost = process.env[this.jiraHostKeyName];
-    this.validateConfigurations({
-      email: this.jiraEmail,
-      host: this.jiraHost,
-    });
-  }
 
-  async getIssueDetails(
-    issue: JiraIssueResponse
-  ): Promise<JiraIssueResponseFocussed> {
-    // Cache here
-    const cachedIssueResponse = await this.cacheMixin.get(issue.key);
-    if (cachedIssueResponse) {
-      console.log("C:");
-      return cachedIssueResponse;
-    }
-
-    const issueObject: JiraIssueResponseFocussed = {
-      id: issue.key,
-      summary: issue.fields.summary,
-      issueType: issue.fields.issuetype.name,
-      description: extractTextFromProseMirrorJSON(
-        issue.fields.description as any
-      ),
+    const configurations: Record<RequiredEnvVars, IConfigurationValue> = {
+      JIRA_USER_EMAIL: {
+        value: process.env.JIRA_USER_EMAIL,
+        error: "Please provide an email address for your Jira user, set JIRA_USER_EMAIL",
+      },
+      JIRA_HOST: {
+        value: process.env.JIRA_HOST,
+        error: "Please provide a Jira host, set JIRA_HOST",
+      },
+      JIRA_API_TOKEN: {
+        value: process.env.JIRA_API_TOKEN,
+        error: "Please provide a Jira API token, set JIRA_API_TOKEN",
+      },
     };
 
-    console.log("N:");
-    await this.cacheMixin.set(issue.key, issueObject);
+    this.connectorMixin.validateConfigurations(configurations);
+    this.connectorMixin.setConfigurations(configurations);
 
-    return issueObject;
-  }
+    const host = this.connectorMixin.getConfiguration('JIRA_HOST');
+    const email = this.connectorMixin.getConfiguration('JIRA_USER_EMAIL');
+    const apiToken = this.connectorMixin.getConfiguration('JIRA_API_TOKEN');
 
-  async getIssue(id: string): Promise<JiraIssueResponseFocussed> {
-    const apiToken: string = this.connectorMixin.apiKeyValue as string;
-    const email: string = this.jiraEmail as string;
-    const host: string = this.jiraHost as string;
-
-    const client = new Version3Client({
+    this.client = new Version3Client({
       host,
       authentication: {
         basic: {
@@ -69,29 +49,36 @@ export class JiraConnector {
         },
       },
     });
-
-    return await this.getIssueDetails(
-      await client.issues.getIssue({ issueIdOrKey: id })
-    );
   }
 
-  validateConfigurations({
-    email,
-    host,
-  }: {
-    email: string | undefined;
-    host: string | undefined;
-  }) {
-    if (!email) {
-      throw new Error(
-        `Please provide an email address for your user, ${this.jiraUserEmailKeyName}`
-      );
+  async getIssue(id: string): Promise<JiraIssueResponseFocussed> {
+    try {
+      const issue = await this.client.issues.getIssue({ issueIdOrKey: id });
+      return this.getIssueDescription(issue as any);
+    } catch (error) {
+      console.error('Error fetching issue from Jira:', error);
+      throw error;
+    }
+  }
+
+  async getIssueDescription(issue: JiraIssueResponse): Promise<JiraIssueResponseFocussed> {
+    // Cache here
+    const cachedIssueResponse = await this.cacheMixin.get(issue.key);
+    if (cachedIssueResponse) {
+      console.log("Cached Issue:");
+      return cachedIssueResponse;
     }
 
-    if (!host) {
-      throw new Error(
-        `Please provide an atlassian host such as https://your-org-name.atlassian.com, ${this.jiraHostKeyName}`
-      );
-    }
+    const issueObject: JiraIssueResponseFocussed = {
+      id: issue.key,
+      summary: issue.fields.summary,
+      issueType: issue.fields.issuetype.name,
+      description: extractTextFromProseMirrorJSON(issue.fields.description as any),
+    };
+
+    console.log("New Issue:");
+    await this.cacheMixin.set(issue.key, issueObject);
+
+    return issueObject;
   }
 }
