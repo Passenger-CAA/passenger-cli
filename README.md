@@ -12,7 +12,7 @@ Passenger, named subtly after the diligent passenger pigeon, is a tool that pair
 ### Connect to GitHub
 1. Add the GitHub App to your organization or specific repo(s) through the [Passenger Code-Alignment Assistant App](https://github.com/apps/passenger-caa) for a one-click secure connection.
 2. Populate the following environment variables:
-```bash
+```toml
 ISSUE_TRACKER_SYSTEM='github'
 OPENAI_API_KEY=""
 # Github only
@@ -21,7 +21,7 @@ GITHUB_REPO="passenger"
 # The private key you generated using the GitHub app
 GITHUB_PRIVATE_KEY_PATH="path/to/github-app-pem-passenger-cca.pem"
 # *optional* Save a request speeds things up a tiny bit
-
+```
 ## Usage
 Refer to the [Usage Guide](link-to-usage-guide) for examples and instructions on how to use Passenger.
 
