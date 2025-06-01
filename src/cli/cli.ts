@@ -5,7 +5,7 @@ import { hideBin } from "yargs/helpers";
 import { initializeIssueTracker, scoreFile } from "../lib/lib";
 
 const issueTrackerSystemSelection = process.env.ISSUE_TRACKER_SYSTEM;
-const issueTrackingSystem = initializeIssueTracker(issueTrackerSystemSelection as any);
+const issueTrackingSystem = initializeIssueTracker(issueTrackerSystemSelection as ('jira' | 'github' | 'linear' | 'asana' | 'trello'));
 
 yargs(hideBin(process.argv))
   .command(
