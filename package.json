@@ -4,19 +4,23 @@
   "module": "./src/cli/cli.ts",
   "type": "module",
   "devDependencies": {
-    "bun-types": "^0.5.0",
-    "@types/yargs": "17.0.24"
+    "@types/yargs": "17.0.24",
+    "bun-types": "^0.5.0"
   },
   "scripts": {
     "start": "bun run ./src/cli/cli.ts --help",
     "build": "bun build --compile ./src/cli/cli.ts --outFile passenger-$npm_package_version"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@linear/sdk": "^40.0.0",
+    "asana": "^3.0.16",
     "dotenv": "^16.3.1",
     "file-system-cache": "^2.4.4",
     "jira.js": "^2.19.1",
     "octokit": "^3.1.1",
     "openai": "^4.14.2",
+    "trello-node-api": "^0.0.9",
     "yargs": "17.7.2"
   }
 }
