@@ -1,11 +1,12 @@
-import Connector from "../mixins/Connector";
+import { Connector, IConfigurationValue } from "../mixins/Connector";
 import OpenAI from "openai";
+import { LLMProvider } from "../types/LLMProvider.types";
 
 type RequiredEnvVars = 'OPENAI_API_KEY'
 
-export class OpenAIConnector {
+export class OpenAIConnector implements LLMProvider {
   #openai: OpenAI;
-  id: string = "openai";
+  readonly id: string = "openai";
   connectorMixin!: Connector<RequiredEnvVars>;
   openaiAPIKeyKeyName: RequiredEnvVars = "OPENAI_API_KEY";
 
@@ -14,16 +15,36 @@ export class OpenAIConnector {
       id: this.id,
     });
 
-    this.connectorMixin.setConfigurations({
+    const configurations: Record<RequiredEnvVars, IConfigurationValue> = {
       OPENAI_API_KEY: {
         value: process.env[this.openaiAPIKeyKeyName],
         error: `Please set the environment variable: ${this.openaiAPIKeyKeyName}`,
       }
-    })
+    }
+
+    this.connectorMixin.validateConfigurations(configurations);
+    this.connectorMixin.setConfigurations(configurations);
 
     this.#openai = new OpenAI({
       apiKey: this.connectorMixin.getConfiguration('OPENAI_API_KEY'),
     });
+  }
+
+  /**
+   * Generate content from a prompt (required by LLMProvider)
+   */
+  async generateContent(prompt: string): Promise<string> {
+    const response = await this.#openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
+
+    return response.choices[0]?.message?.content || "";
   }
 
   async compareIssueToSourceCode({ issue, sourceCode }: {issue: string, sourceCode: string}) {
@@ -44,7 +65,9 @@ export class OpenAIConnector {
   }
 
   async cucumberFromFile(filePath: string) {
-    return await this.cucumberFromString(filePath);
+    const fs = await import('fs/promises');
+    const fileContent = await fs.readFile(filePath, 'utf-8');
+    return await this.cucumberFromString(fileContent);
   }
 
   async cucumberFromString(str: string) {

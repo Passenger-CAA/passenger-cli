@@ -1,48 +1,26 @@
-import Connector, { IConfigurationValue } from "../mixins/Connector";
-import { Cache } from "../mixins/Cache";
-import { Cache as FileSystemCache } from "file-system-cache";
+import { Connector, IConfigurationValue } from "../mixins/Connector";
+import { IssueTracker, NormalizedIssue, TicketAnalysis } from "../types/IssueTracker.types";
+import { LLMProvider } from "../types/LLMProvider.types";
 import { Version3Client } from "jira.js";
+import { Cache as FileSystemCache } from "file-system-cache";
+import { Cache } from "../mixins/Cache";
 import { extractTextFromProseMirrorJSON } from "../utils/customProseParser";
+import { JiraIssueResponse, JiraIssueResponseFocussed, JiraIssueSearchResponseFocussed } from "../../types/issueResponse";
 
 type RequiredEnvVars = 'JIRA_USER_EMAIL' | 'JIRA_HOST' | 'JIRA_API_TOKEN';
 
-// Define the structure for a focused issue response
-export interface JiraIssueResponseFocussed {
-  id: string;
-  summary: string;
-  issueType: string;
-  description: string;
-  // Add status if it's available and needed.
-  // status: string;
-}
-
-// Define the structure for the search response
-export type JiraIssueSearchResponseFocussed = JiraIssueResponseFocussed[];
-
-// Define a basic structure for what we expect from Jira's issue object (used in getIssueDescription)
-// This helps in typing and understanding the structure.
-export interface JiraIssueResponse {
-  key: string;
-  fields: {
-    summary: string;
-    issuetype: {
-      name: string;
-    };
-    description: any; // Keeping as 'any' due to complex structure, handled by extractTextFromProseMirrorJSON
-    // Add status field if it exists in the Jira API response, e.g.,
-    // status: { name: string; };
-  };
-}
-
-export class JiraConnector {
-  id: string = "jira";
-  connectorMixin!: Connector<RequiredEnvVars>;
+export class JiraConnector implements IssueTracker {
+    // ... other properties ...
+    readonly id = "jira";
+    connectorMixin!: Connector<RequiredEnvVars>;
   cacheMixin!: FileSystemCache;
   client!: Version3Client;
+  private llmProvider?: LLMProvider;
 
-  constructor() {
+  constructor(llmProvider?: LLMProvider) {
+    this.llmProvider = llmProvider;
     this.connectorMixin = new Connector({
-      id: this.id
+      id: "jira"
     });
     this.cacheMixin = new Cache();
 
@@ -79,29 +57,27 @@ export class JiraConnector {
     });
   }
 
-  async getIssue(id: string): Promise<JiraIssueResponseFocussed> {
+  async getIssue(id: string): Promise<NormalizedIssue> {
     try {
       const issue = await this.client.issues.getIssue({ issueIdOrKey: id });
       return this.getIssueDescription(issue as any);
-    } catch (error) {
-      console.error('Error fetching issue from Jira:', error);
+    } catch (error: any) {
+      this.connectorMixin.log(`Error fetching issue from Jira: ${error.message}`);
       throw error;
     }
   }
 
-  private _mapIssueToFocussedResponse(issue: JiraIssueResponse): JiraIssueResponseFocussed {
-    // TODO: Add status mapping if issue.fields.status is available and needed
-    // const status = issue.fields.status ? issue.fields.status.name : "Status Unknown";
+  private _mapIssueToNormalizedResponse(issue: JiraIssueResponse): NormalizedIssue {
+    const status = issue.fields.status ? issue.fields.status.name : "Status Unknown";
     return {
       id: issue.key,
-      summary: issue.fields.summary,
-      issueType: issue.fields.issuetype.name,
+      title: issue.fields.summary,
       description: extractTextFromProseMirrorJSON(issue.fields.description as any),
-      // status: status,
+      status: status,
     };
   }
 
-  async getIssueDescription(issue: JiraIssueResponse): Promise<JiraIssueResponseFocussed> {
+  async getIssueDescription(issue: JiraIssueResponse): Promise<NormalizedIssue> {
     // Cache here
     const cachedIssueResponse = await this.cacheMixin.get(issue.key);
     if (cachedIssueResponse) {
@@ -110,13 +86,13 @@ export class JiraConnector {
     }
 
     this.connectorMixin.log(`Mapping and caching new issue ${issue.key}`);
-    const issueObject = this._mapIssueToFocussedResponse(issue);
+    const normalizedIssue = this._mapIssueToNormalizedResponse(issue);
 
-    await this.cacheMixin.set(issue.key, issueObject);
-    return issueObject;
+    await this.cacheMixin.set(issue.key, normalizedIssue);
+    return normalizedIssue;
   }
 
-  async searchIssues(jql: string): Promise<JiraIssueSearchResponseFocussed> {
+  async searchIssues(jql: string): Promise<NormalizedIssue[]> {
     this.connectorMixin.log(`Searching issues with JQL: ${jql}`);
     try {
       const searchResults = await this.client.issueSearch.searchForIssuesUsingJqlPost({
@@ -129,7 +105,7 @@ export class JiraConnector {
         return [];
       }
 
-      const focussedIssues: JiraIssueSearchResponseFocussed = [];
+      const focussedIssues: NormalizedIssue[] = [];
       for (const issueData of searchResults.issues) {
         // The 'issueData' from search results might not perfectly match 'JiraIssueResponse'
         // It's common for search results to have a slightly different or subset structure.
@@ -142,7 +118,7 @@ export class JiraConnector {
         // to JiraIssueResponseFocussed and then caching that.
 
         if (!issueData.key) {
-            this.connectorMixin.warn(`Skipping issue with missing key in search results: ${JSON.stringify(issueData)}`);
+            this.connectorMixin.log(`Skipping issue with missing key in search results: ${JSON.stringify(issueData)}`);
             continue;
         }
 
@@ -153,13 +129,13 @@ export class JiraConnector {
           const detailedIssue = await this.getIssueDescription(issueData as any);
           focussedIssues.push(detailedIssue);
         } catch (error: any) {
-          this.connectorMixin.error(`Error processing issue ${issueData.key} from search results: ${error.message}`);
+          this.connectorMixin.log(`Error processing issue ${issueData.key} from search results: ${error.message}`);
           // Optionally, continue to process other issues
         }
       }
       return focussedIssues;
     } catch (error: any) {
-      this.connectorMixin.error(`Error searching issues with JQL "${jql}": ${error.message}`);
+      this.connectorMixin.log(`Error searching issues with JQL "${jql}": ${error.message}`);
       throw error;
     }
   }

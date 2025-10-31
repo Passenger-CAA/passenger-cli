@@ -4,7 +4,7 @@ export interface IConfigurationValue {
   optional?: boolean;
 }
 
-export default class Connector<T extends string> {
+export class Connector<T extends string> {
   private id: string;
   #configurations: Record<T, string> = {} as any;
 

@@ -1,29 +1,121 @@
 # Passenger
 
-Passenger, named subtly after the diligent passenger pigeon, is a tool that pairs your code with project objectives by comparing source code against issues from GitHub or Jira. Through AI, it assesses the alignment and offers feedback, aiding developers in aligning their code accurately with project goals.
+Passenger, named after the diligent passenger pigeon, is a tool that keeps you focused on project requirements while you code. It provides real-time BDD-focused feedback by watching your development and comparing changes against issue requirements from GitHub, Jira, Linear, Asana, or Trello.
 
 ## Features
-- Real-time comparison between source code and GitHub Issues or Jira tickets, empowered by AI.
-- Scoring system that measures the alignment between code and project objectives, providing actionable feedback to developers.
-- User-friendly CLI for effortless interaction.
+- **BDD on Steroids**: Real-time feedback as you code, keeping requirements as your "north star"
+- **Watch Mode**: Monitors git commits and file changes, providing instant guidance from Passenger Pigeon
+- **Multi-Platform Support**: Works with GitHub, Jira, Linear, Asana, and Trello
+- **Multi-LLM Support**: Choose between Claude, Gemini, or OpenAI for analysis
+- **Score Mode**: Compare source code alignment with issue requirements
+- **Configuration File**: Simple `passenger.json` setup instead of managing environment variables
+
+## Installation
+
+### For Local Development (npm link)
+```bash
+git clone <your-repo>
+cd passenger-cli
+npm install
+npm link
+```
+
+Now `passenger` command is available globally.
+
+### For Use in Other Projects
+```bash
+npm install -g passenger
+# or for local project
+npm install --save-dev passenger
+```
+
+## Quick Start
+
+1. **Initialize Passenger in your project:**
+```bash
+cd your-project
+passenger init
+```
+
+This will create a `passenger.json` file with your configuration (issue tracker + LLM settings).
+
+2. **Start watching your development:**
+```bash
+passenger watch <issue-id>
+```
+
+Passenger Pigeon will now watch your git commits and file changes, providing real-time BDD-focused feedback!
 
 ## Getting Started
 
-### Connect to GitHub
-1. Add the GitHub App to your organization or specific repo(s) through the [Passenger Code-Alignment Assistant App](https://github.com/apps/passenger-caa) for a one-click secure connection.
-2. Populate the following environment variables:
-```toml
-ISSUE_TRACKER_SYSTEM='github'
-OPENAI_API_KEY=""
-# Github only
-GITHUB_OWNER="adam-cyclones"
-GITHUB_REPO="passenger"
-# The private key you generated using the GitHub app
-GITHUB_PRIVATE_KEY_PATH="path/to/github-app-pem-passenger-cca.pem"
-# *optional* Save a request speeds things up a tiny bit
+### Configuration
+
+Passenger uses a `passenger.json` file in your project root. Run `passenger init` to create it interactively, or create it manually:
+
+```json
+{
+  "issueTracker": {
+    "system": "github",
+    "github": {
+      "owner": "your-org",
+      "repo": "your-repo",
+      "privateKeyPath": "/path/to/github-app-key.pem"
+    }
+  },
+  "llm": {
+    "system": "claude",
+    "claude": {
+      "apiKey": "your-api-key"
+    }
+  }
+}
 ```
+
+**Supported Issue Trackers:**
+- `github` - Requires: owner, repo, privateKeyPath
+- `jira` - Requires: host, userEmail, apiToken
+- `linear` - Requires: apiKey
+- `asana` - Requires: personalAccessToken
+- `trello` - Requires: apiKey, userToken
+
+**Supported LLMs:**
+- `claude` - Requires: apiKey
+- `gemini` - Requires: apiKey
+- `openai` - Requires: apiKey
+
+### Legacy: Environment Variables
+
+You can still use environment variables instead of `passenger.json`:
+```bash
+ISSUE_TRACKER_SYSTEM=github
+LLM_SYSTEM=claude
+GITHUB_OWNER=your-org
+GITHUB_REPO=your-repo
+GITHUB_PRIVATE_KEY_PATH=/path/to/key.pem
+ANTHROPIC_API_KEY=your-key
+```
+
 ## Usage
-Refer to the [Usage Guide](link-to-usage-guide) for examples and instructions on how to use Passenger.
+
+### Watch Mode (BDD on Steroids)
+```bash
+passenger watch 123
+```
+Watches your development and provides real-time feedback based on issue #123.
+
+### Score Mode
+```bash
+passenger score 123 src/myfile.ts
+```
+Compares a specific file against issue requirements.
+
+### Analyze Mode
+```bash
+passenger analyze 123
+```
+Analyzes an issue and returns structured BDD analysis.
+
+For detailed watch mode usage, see [WATCH_COMMAND_GUIDE.md](./WATCH_COMMAND_GUIDE.md).
 
 ## Contribution
 We welcome contributions! See the [Contribution Guide](link-to-contribution-guide) for details on how to contribute.

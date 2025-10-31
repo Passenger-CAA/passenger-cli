@@ -1,4 +1,5 @@
-import { Connector } from "../mixins/Connector";
+import { Connector, IConfigurationValue } from "../mixins/Connector";
+import { LLMProvider } from "../types/LLMProvider.types";
 import Anthropic from '@anthropic-ai/sdk';
 import * as fs from 'fs/promises'; // For reading files
 
@@ -10,26 +11,55 @@ export interface ClaudeResponse {
   accuracy?: number; // Assuming accuracy might be harder to get consistently from Claude as a number
 }
 
-export class ClaudeConnector {
-  id = "claude";
-  connectorMixin: Connector;
+type RequiredEnvVars = 'apiKey';
+
+export class ClaudeConnector implements LLMProvider {
+  readonly id = "claude";
+  connectorMixin: Connector<RequiredEnvVars>;
   #anthropic!: Anthropic;
 
   constructor() {
     this.connectorMixin = new Connector({ id: this.id });
 
-    const configurations = {
-      apiKey: ANTHROPIC_API_KEY,
+    const configurations: Record<RequiredEnvVars, IConfigurationValue> = {
+      apiKey: {
+        value: ANTHROPIC_API_KEY,
+        error: "Please provide an Anthropic API Key, set ANTHROPIC_API_KEY",
+      },
     };
 
-    this.connectorMixin.validateConfigurations(configurations, ["apiKey"]);
-    this.connectorMixin.setConfigurations(configurations); // Though API key is used directly here
+    this.connectorMixin.validateConfigurations(configurations);
+    this.connectorMixin.setConfigurations(configurations);
 
     const apiKey = this.connectorMixin.getConfiguration("apiKey");
     if (!apiKey) {
       throw new Error("Anthropic API Key is not configured. Ensure ANTHROPIC_API_KEY environment variable is set.");
     }
     this.#anthropic = new Anthropic({ apiKey: apiKey });
+  }
+
+  /**
+   * Generate content from a prompt (implements LLMProvider interface)
+   * @param prompt The prompt to send to Claude
+   * @returns The generated text response
+   */
+  async generateContent(prompt: string): Promise<string> {
+    try {
+      const completion = await this.#anthropic.completions.create({
+        model: "claude-2.1",
+        max_tokens_to_sample: 2000,
+        prompt: `${Anthropic.HUMAN_PROMPT} ${prompt}${Anthropic.AI_PROMPT}`,
+      });
+
+      if (!completion.completion) {
+        throw new Error("Received an empty completion from Claude API.");
+      }
+
+      return completion.completion;
+    } catch (error: any) {
+      this.connectorMixin.log(`Error generating content with Claude: ${error.message}`);
+      throw error;
+    }
   }
 
   // Basic response parser - this will likely need significant refinement
@@ -92,9 +122,9 @@ ${Anthropic.AI_PROMPT} Analysis:`;
       return this._parseClaudeResponse(completion.completion);
 
     } catch (error: any) {
-      this.connectorMixin.error(`Error comparing issue to source code with Claude: ${error.message}`);
+      this.connectorMixin.log(`Error comparing issue to source code with Claude: ${error.message}`);
       if (error.response && error.response.data) {
-        this.connectorMixin.error(`Claude API Error details: ${JSON.stringify(error.response.data)}`);
+        this.connectorMixin.log(`Claude API Error details: ${JSON.stringify(error.response.data)}`);
       }
       // Return a failed analysis object or rethrow
       return { analysis: `Error: ${error.message}` };
@@ -107,7 +137,7 @@ ${Anthropic.AI_PROMPT} Analysis:`;
       const fileContent = await fs.readFile(filePath, 'utf-8');
       return this.cucumberFromString(fileContent);
     } catch (error: any) {
-      this.connectorMixin.error(`Error reading file ${filePath}: ${error.message}`);
+      this.connectorMixin.log(`Error reading file ${filePath}: ${error.message}`);
       return { analysis: `Error reading file: ${error.message}` };
     }
   }
@@ -139,9 +169,9 @@ ${Anthropic.AI_PROMPT} Gherkin:`;
       return { analysis: completion.completion.trim() };
 
     } catch (error: any) {
-      this.connectorMixin.error(`Error generating cucumber from string with Claude: ${error.message}`);
+      this.connectorMixin.log(`Error generating cucumber from string with Claude: ${error.message}`);
       if (error.response && error.response.data) {
-        this.connectorMixin.error(`Claude API Error details: ${JSON.stringify(error.response.data)}`);
+        this.connectorMixin.log(`Claude API Error details: ${JSON.stringify(error.response.data)}`);
       }
       return { analysis: `Error: ${error.message}` };
     }

@@ -1,5 +1,6 @@
-import { Connector, ConnectorConfig } from "../mixins/Connector";
-import { Cache } from "../mixins/Cache";
+import { Connector, IConfigurationValue } from "../mixins/Connector";
+import { IssueTracker, NormalizedIssue, TicketAnalysis } from "../types/IssueTracker.types";
+import { LLMProvider } from "../types/LLMProvider.types";
 import FileSystemCache from "file-system-cache";
 import TrelloNodeAPI from 'trello-node-api'; // Import Trello client
 
@@ -11,31 +12,38 @@ export interface TrelloCardResponseFocussed {
   listName: string;   // Name of the list the card is in (status)
 }
 
+type RequiredEnvVars = 'apiKey' | 'userToken';
+
 const TRELLO_API_KEY = process.env.TRELLO_API_KEY;
 const TRELLO_USER_TOKEN = process.env.TRELLO_USER_TOKEN;
 
-export class TrelloConnector {
-  id = "trello";
-  connectorMixin: Connector;
-  cacheMixin: Cache<TrelloCardResponseFocussed>;
+export class TrelloConnector implements IssueTracker {
+  readonly id = "trello";
+  connectorMixin: Connector<RequiredEnvVars>;
+  cacheMixin: any;
   trello!: TrelloNodeAPI; // Type from trello-node-api
+  private llmProvider?: LLMProvider;
 
-  constructor() {
-    this.connectorMixin = new Connector({ id: this.id });
-    this.cacheMixin = new Cache<TrelloCardResponseFocussed>(
-      new FileSystemCache({
-        basePath: "./.cache/trello",
-        ttl: 60 * 60 * 24 * 7, // 1 week
-      }),
-      this.connectorMixin
-    );
+  constructor(llmProvider?: LLMProvider) {
+    this.llmProvider = llmProvider;
+    this.connectorMixin = new Connector({ id: "trello" });
+    this.cacheMixin = FileSystemCache({
+      basePath: "./.cache/trello",
+      ttl: 60 * 60 * 24 * 7, // 1 week
+    });
 
-    const configurations = {
-      apiKey: TRELLO_API_KEY,
-      userToken: TRELLO_USER_TOKEN,
+    const configurations: Record<RequiredEnvVars, IConfigurationValue> = {
+      apiKey: {
+        value: TRELLO_API_KEY,
+        error: "Please provide a Trello API key, set TRELLO_API_KEY",
+      },
+      userToken: {
+        value: TRELLO_USER_TOKEN,
+        error: "Please provide a Trello user token, set TRELLO_USER_TOKEN",
+      },
     };
 
-    this.connectorMixin.validateConfigurations(configurations, ["apiKey", "userToken"]);
+    this.connectorMixin.validateConfigurations(configurations);
     this.connectorMixin.setConfigurations(configurations);
 
     const apiKey = this.connectorMixin.getConfiguration("apiKey");
@@ -47,49 +55,51 @@ export class TrelloConnector {
     this.trello = new TrelloNodeAPI(apiKey, userToken);
   }
 
-  // Helper to map raw Trello card data (and its list name) to TrelloCardResponseFocussed
-  private _mapTrelloCardToFocussedResponse(card: any, listName: string): TrelloCardResponseFocussed {
+  // Helper to map raw Trello card data (and its list name) to NormalizedIssue
+  private _mapTrelloCardToNormalizedResponse(card: any, listName: string): NormalizedIssue {
     return {
       id: card.id,
-      name: card.name || "Untitled Card",
-      description: card.desc || "",
-      listName: listName,
+      title: card.name || "Untitled Card",
+      description: card.desc || undefined,
+      status: listName,
     };
   }
 
-  async getCard(cardId: string): Promise<TrelloCardResponseFocussed> {
-    const cachedCard = await this.cacheMixin.get(cardId);
+  // Renamed from getCard to getIssue for consistency
+  async getIssue(cardId: string | number): Promise<NormalizedIssue> {
+    const id = String(cardId);
+    const cachedCard = await this.cacheMixin.get(id);
     if (cachedCard) {
-      this.connectorMixin.log(`Returning cached Trello card for ID: ${cardId}`);
+      this.connectorMixin.log(`Returning cached Trello card for ID: ${id}`);
       return cachedCard;
     }
 
-    this.connectorMixin.log(`Fetching card from Trello API: ${cardId}`);
+    this.connectorMixin.log(`Fetching card from Trello API: ${id}`);
     try {
-      const card = await this.trello.card.get(cardId);
+      const card = await (this.trello as any).card.get(id);
       if (!card || !card.id) {
-        throw new Error(`Card with ID ${cardId} not found or invalid response from Trello.`);
+        throw new Error(`Card with ID ${id} not found or invalid response from Trello.`);
       }
       if (!card.idList) {
-        throw new Error(`Card with ID ${cardId} does not have an associated list (idList is missing).`);
+        throw new Error(`Card with ID ${id} does not have an associated list (idList is missing).`);
       }
 
       // Fetch the list to get its name (which we use as status)
-      const list = await this.trello.list.get(card.idList);
+      const list = await (this.trello as any).list.get(card.idList);
       if (!list || !list.name) {
-        throw new Error(`List with ID ${card.idList} for card ${cardId} not found or has no name.`);
+        throw new Error(`List with ID ${card.idList} for card ${id} not found or has no name.`);
       }
 
-      const cardObject = this._mapTrelloCardToFocussedResponse(card, list.name);
+      const normalizedIssue = this._mapTrelloCardToNormalizedResponse(card, list.name);
 
-      await this.cacheMixin.set(cardObject.id, cardObject);
-      return cardObject;
+      await this.cacheMixin.set(normalizedIssue.id, normalizedIssue);
+      return normalizedIssue;
     } catch (error: any) {
-      this.connectorMixin.error(`Error fetching card ${cardId} from Trello: ${error.message}`);
+      this.connectorMixin.log(`Error fetching card ${id} from Trello: ${error.message}`);
       // trello-node-api might return errors in a specific format, e.g. error.message or error.response.data
       // For now, logging error.message is a good start.
       if (error.response && error.response.data) {
-         this.connectorMixin.error(`Trello API Error details: ${JSON.stringify(error.response.data)}`);
+         this.connectorMixin.log(`Trello API Error details: ${JSON.stringify(error.response.data)}`);
       }
       throw error; // Re-throw the error
     }

@@ -1,4 +1,4 @@
-interface JiraIssueResponse {
+export interface JiraIssueResponse {
   expand: string;
   id: string;
   self: string;
@@ -27,9 +27,11 @@ interface JiraIssueResponse {
   };
 }
 
-interface JiraIssueResponseFocussed {
+export interface JiraIssueResponseFocussed {
   id: JiraIssueResponse["key"];
   summary: JiraIssueResponse["fields"]["summary"];
   description: JiraIssueResponse["fields"]["description"];
   issueType: JiraIssueResponse["fields"]["issuetype"]["name"];
 }
+
+export type JiraIssueSearchResponseFocussed = JiraIssueResponseFocussed[];

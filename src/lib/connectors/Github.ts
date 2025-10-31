@@ -1,24 +1,30 @@
-import Connector, { IConfigurationValue } from "../mixins/Connector";
-import { Cache } from "../mixins/Cache";
-import { Cache as FileSystemCache } from "file-system-cache";
+import { Connector, IConfigurationValue } from "../mixins/Connector";
+import { IssueTracker, NormalizedIssue, TicketAnalysis } from "../types/IssueTracker.types";
+import { LLMProvider } from "../types/LLMProvider.types";
 import { App } from "octokit";
+import { Cache as FileSystemCache } from "file-system-cache";
+import { Cache } from "../mixins/Cache";
 import { readFile } from "fs/promises";
 
-type SupportedEnvVars = 'GITHUB_APP_ID' | 'GITHUB_OWNER' | 'GITHUB_REPO' | "GITHUB_INSTALLATION_ID" | "GITHUB_PRIVATE_KEY_PATH";
+type SupportedEnvVars = 'GITHUB_APP_ID' | 'GITHUB_INSTALLATION_ID' | 'GITHUB_PRIVATE_KEY_PATH' | 'GITHUB_OWNER' | 'GITHUB_REPO';
 
-export class GithubConnector {
-    githubOwnerKeyName: SupportedEnvVars = "GITHUB_OWNER";
-    githubRepoKeyName: SupportedEnvVars = "GITHUB_REPO";
-    githubInstallationIDKeyName: SupportedEnvVars = "GITHUB_INSTALLATION_ID";
-    githubAppPrivateKeyPathKeyName: SupportedEnvVars = "GITHUB_PRIVATE_KEY_PATH";
-    id: string = "github";
+export class GithubConnector implements IssueTracker {
+    readonly id = "github";
     connectorMixin!: Connector<SupportedEnvVars>;
     cacheMixin!: FileSystemCache;
     GithubApp!: App;
+    private llmProvider?: LLMProvider;
 
-    constructor() {
+    // Environment variable key names
+    githubInstallationIDKeyName: SupportedEnvVars = 'GITHUB_INSTALLATION_ID';
+    githubAppPrivateKeyPathKeyName: SupportedEnvVars = 'GITHUB_PRIVATE_KEY_PATH';
+    githubOwnerKeyName: SupportedEnvVars = 'GITHUB_OWNER';
+    githubRepoKeyName: SupportedEnvVars = 'GITHUB_REPO';
+
+    constructor(llmProvider?: LLMProvider) {
+        this.llmProvider = llmProvider;
         this.connectorMixin = new Connector({
-            id: this.id
+            id: "github"
         });
         this.cacheMixin = new Cache();
 
@@ -69,12 +75,12 @@ export class GithubConnector {
                 { owner, repo }
             );
             installation = {...data}
-            console.log('Got installation ID... (fetched from live)', installationID)
+            console.log('Got installation ID... (fetched from live)', installation.id)
         } else {
             console.log('Got installation ID... (found in environment)', installationID)
         }
-    
-        installationID |= installation.id;
+
+        installationID = installationID || installation.id;
 
         
 
@@ -94,7 +100,7 @@ export class GithubConnector {
         return privateKey;
     }
 
-    async getIssue(issueNumber: number) {
+    async getIssue(issueNumber: number): Promise<NormalizedIssue> {
         const octokit = await this.getOctokit();
 
         const owner = this.connectorMixin.getConfiguration('GITHUB_OWNER');
@@ -105,7 +111,61 @@ export class GithubConnector {
             repo,
             issue_number: issueNumber,
         });
-          
-        return issue;
+
+        const normalizedIssue: NormalizedIssue = {
+            id: issue.number,
+            title: issue.title,
+            description: issue.body || undefined,
+            status: issue.state,
+        };
+
+        // Only analyze if LLM provider is configured
+        if (this.llmProvider) {
+            normalizedIssue.analysis = await this.analyzeTicket(issue);
+        }
+
+        return normalizedIssue;
+    }
+
+    async analyzeTicket(issue: any): Promise<TicketAnalysis> {
+        if (!this.llmProvider) {
+            throw new Error("No LLM provider configured for ticket analysis");
+        }
+
+        const prompt = `You are an expert Business Analyst. Analyze the following GitHub issue and provide a structured analysis in JSON format.
+
+**Issue Title:** ${issue.title}
+**Issue Body:** ${issue.body}
+
+**Instructions:**
+
+1.  **\`is_workable\`:** Determine if the issue is well-defined and actionable for a developer. It should be \`true\` if the issue is clear and has enough information to start working on, and \`false\` otherwise.
+2.  **\`missing_information\`:** If \`is_workable\` is \`false\`, provide a list of strings explaining what information is missing (e.g., "Missing acceptance criteria", "The user story is not well-defined", "The request is ambiguous"). If \`is_workable\` is \`true\`, this should be an empty array.
+3.  **\`user_stories\`:** Generate a list of user stories from the issue, following the format: \`{"as_a": "...", "i_want": "...", "so_that": "..."}\`. If no clear user story can be extracted, provide a best-effort interpretation.
+4.  **\`acceptance_criteria\`:** Extract a list of acceptance criteria from the issue. These should be specific, testable conditions that must be met for the issue to be considered complete.
+
+**JSON Output Format:**
+
+\`\`\`json
+{
+  "ticket_id": "${issue.number}",
+  "title": "${issue.title}",
+  "is_workable": boolean,
+  "missing_information": ["string"],
+  "user_stories": [
+    {
+      "as_a": "string",
+      "i_want": "string",
+      "so_that": "string"
+    }
+  ],
+  "acceptance_criteria": ["string"]
+}
+\`\`\`
+
+**Important:** Only return the JSON object. Do not include any other text or explanations in your response.`;
+
+        const analysis = await this.llmProvider.generateContent(prompt);
+        return JSON.parse(analysis);
     }
 }

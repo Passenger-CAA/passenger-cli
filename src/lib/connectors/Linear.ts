@@ -1,5 +1,6 @@
-import { Connector, ConnectorConfig } from "../mixins/Connector";
-import { Cache } from "../mixins/Cache";
+import { Connector, IConfigurationValue } from "../mixins/Connector";
+import { IssueTracker, NormalizedIssue, TicketAnalysis } from "../types/IssueTracker.types";
+import { LLMProvider } from "../types/LLMProvider.types";
 import FileSystemCache from "file-system-cache";
 import { LinearClient } from "@linear/sdk";
 
@@ -12,36 +13,41 @@ export interface LinearIssueResponseFocussed {
   status: string; // Or the Linear equivalent
 }
 
-export class LinearConnector {
-  id = "linear";
-  connectorMixin: Connector;
-  cacheMixin: Cache<LinearIssueResponseFocussed>;
+type RequiredEnvVars = 'apiKey';
+
+export class LinearConnector implements IssueTracker {
+  readonly id = "linear";
+  connectorMixin: Connector<RequiredEnvVars>;
+  cacheMixin: any;
   client!: LinearClient;
+  private llmProvider?: LLMProvider;
 
-  constructor() {
-    this.connectorMixin = new Connector({ id: this.id });
-    this.cacheMixin = new Cache<LinearIssueResponseFocussed>(
-      new FileSystemCache({
-        basePath: "./.cache/linear",
-        ttl: 60 * 60 * 24 * 7, // 1 week
-      }),
-      this.connectorMixin
-    );
+  constructor(llmProvider?: LLMProvider) {
+    this.llmProvider = llmProvider;
+    this.connectorMixin = new Connector({ id: "linear" });
+    this.cacheMixin = FileSystemCache({
+      basePath: "./.cache/linear",
+      ttl: 60 * 60 * 24 * 7, // 1 week
+    });
 
-    // Initialize LinearClient
-    const apiKey = this.connectorMixin.getConfiguration("apiKey") || process.env.LINEAR_API_KEY;
+    const configurations: Record<RequiredEnvVars, IConfigurationValue> = {
+      apiKey: {
+        value: process.env.LINEAR_API_KEY,
+        error: "Please provide a Linear API key, set LINEAR_API_KEY",
+      },
+    };
+
+    this.connectorMixin.validateConfigurations(configurations);
+    this.connectorMixin.setConfigurations(configurations);
+
+    const apiKey = this.connectorMixin.getConfiguration("apiKey");
     if (!apiKey) {
-      // Try to set it from environment if not already set by validate/setConfigurations
-      // This part might need better handling depending on how configurations are expected to be set.
-      // For now, we assume it should be available via getConfiguration or process.env
       throw new Error("Linear API key is not configured. Ensure LINEAR_API_KEY environment variable is set or provide it via configuration.");
     }
-     // Ensure configurations are set for the connector mixin if needed elsewhere.
-    this.connectorMixin.setConfigurations({ apiKey });
     this.client = new LinearClient({ apiKey });
   }
 
-  async getIssue(id: string): Promise<LinearIssueResponseFocussed> {
+  async getIssue(id: string): Promise<NormalizedIssue> {
     const cachedIssue = await this.cacheMixin.get(id);
     if (cachedIssue) {
       this.connectorMixin.log(`Returning cached issue for ID: ${id}`);
@@ -61,17 +67,17 @@ export class LinearConnector {
       const status = (issue as any).state?.name || 'Status unknown';
 
 
-      const issueObject: LinearIssueResponseFocussed = {
+      const normalizedIssue: NormalizedIssue = {
         id: issue.id,
         title: issue.title,
-        description: issue.description || "", // Assuming description can be undefined
+        description: issue.description || undefined,
         status: status,
       };
 
-      await this.cacheMixin.set(issueObject.id, issueObject);
-      return issueObject;
+      await this.cacheMixin.set(normalizedIssue.id, normalizedIssue);
+      return normalizedIssue;
     } catch (error: any) {
-      this.connectorMixin.error(`Error fetching issue ${id} from Linear: ${error.message}`);
+      this.connectorMixin.log(`Error fetching issue ${id} from Linear: ${error.message}`);
       throw error; // Re-throw the error to be handled by the caller
     }
   }

@@ -5,8 +5,11 @@ import { GithubConnector } from "./connectors/Github";
 import { LinearConnector } from "./connectors/Linear";
 import { AsanaConnector } from "./connectors/Asana";
 import { TrelloConnector } from "./connectors/Trello";
-import { OpenAIConnector } from "./connectors/OpenAI";
+import { OpenAIConnector } from "./connectors/GPT";
 import { ClaudeConnector } from "./connectors/Claude";
+import { GeminiConnector } from "./connectors/Gemini";
+import { IssueTracker } from "./types/IssueTracker.types";
+import { LLMProvider } from "./types/LLMProvider.types";
 import { resolve } from "path";
 
 dotenv.config();
@@ -19,50 +22,54 @@ type IssueTrackerConnector = JiraConnector | GithubConnector | LinearConnector |
 /**
  * A union type that represents an LLM connector.
  */
-type LLMConnector = OpenAIConnector | ClaudeConnector;
+type LLMConnector = OpenAIConnector | ClaudeConnector | GeminiConnector;
 
 /**
  * Initializes the issue tracker connector based on the provided system ID.
  *
  * @param issueTrackerSystem The ID of the issue tracking system to initialize.
- * @returns {IssueTrackerConnector} An instance of the issue tracker connector.
+ * @param llmProvider Optional LLM provider to inject for ticket analysis.
+ * @returns {IssueTracker} An instance of the issue tracker connector.
  * @throws Will throw an error if the issue tracker system is not supported.
  */
-export function initializeIssueTracker(issueTrackerSystem: 'jira' | 'github' | 'linear' | 'asana' | 'trello'): IssueTrackerConnector {
+export function initializeIssueTracker(
+  issueTrackerSystem: 'jira' | 'github' | 'linear' | 'asana' | 'trello',
+  llmProvider?: LLMProvider
+): IssueTracker {
   let connector: IssueTrackerConnector;
   switch (issueTrackerSystem) {
     case 'github':
-      connector = new GithubConnector();
+      connector = new GithubConnector(llmProvider);
       break;
     case 'jira':
-      connector = new JiraConnector();
+      connector = new JiraConnector(llmProvider);
       break;
     case 'linear':
-      connector = new LinearConnector();
+      connector = new LinearConnector(llmProvider);
       break;
     case 'asana':
-      connector = new AsanaConnector();
+      connector = new AsanaConnector(llmProvider);
       break;
     case 'trello':
-      connector = new TrelloConnector();
+      connector = new TrelloConnector(llmProvider);
       break;
     default:
       // This should be caught by TypeScript if the input type is correct
       const exhaustiveCheck: never = issueTrackerSystem;
       throw new Error(`Unsupported issue tracking system: ${exhaustiveCheck}`);
   }
-  console.log(`Initialized ${connector.id} connector.`);
+  console.log(`Initialized ${connector.id} connector${llmProvider ? ` with ${llmProvider.id} LLM` : ''}.`);
   return connector;
 }
 
 /**
  * Initializes the LLM connector based on the provided system ID or environment configuration.
  *
- * @param llmSystem Optional ID of the LLM system to initialize. Defaults to process.env.LLM_SYSTEM or 'openai'.
- * @returns {LLMConnector} An instance of the LLM connector.
+ * @param llmSystem Optional ID of the LLM system to initialize. Defaults to process.env.LLM_SYSTEM or 'gemini'.
+ * @returns {LLMProvider} An instance of the LLM connector.
  */
-export function initializeLLMConnector(llmSystem?: string): LLMConnector {
-  const targetLLM = llmSystem || process.env.LLM_SYSTEM || 'openai'; // Default to openai
+export function initializeLLMConnector(llmSystem?: string): LLMProvider {
+  const targetLLM = llmSystem || process.env.LLM_SYSTEM || 'gemini'; // Default to gemini
   let connector: LLMConnector;
 
   switch (targetLLM.toLowerCase()) {
@@ -70,8 +77,11 @@ export function initializeLLMConnector(llmSystem?: string): LLMConnector {
       connector = new ClaudeConnector();
       break;
     case 'openai':
-    default: // Default to OpenAI if system is not recognized or not provided
       connector = new OpenAIConnector();
+      break;
+    case 'gemini':
+    default: // Default to Gemini if system is not recognized or not provided
+      connector = new GeminiConnector();
       break;
   }
   console.log(`Initialized ${connector.id} LLM connector.`);
@@ -85,49 +95,20 @@ export async function scoreFile({
   issue, // This is the issue ID/key
   file,
 }: {
-  issueTrackingSystem: IssueTrackerConnector, // This is already an initialized connector instance
+  issueTrackingSystem: IssueTracker, // This is already an initialized connector instance
   issue: string;
   file: string;
 }) {
 
   const llmConnector = initializeLLMConnector(process.env.LLM_SYSTEM);
 
-  let issueTitle = "";
-  let issueDescription = "";
-  let issueId = "";
-
   console.log(`Fetching details for issue "${issue}" from ${issueTrackingSystem.id}...`);
 
-  if (issueTrackingSystem instanceof GithubConnector) {
-    const issueData = await issueTrackingSystem.getIssue(parseInt(issue)); // Github uses number ID
-    issueTitle = issueData.title;
-    issueDescription = issueData.body || "";
-    issueId = issueData.id.toString();
-    console.log(`${issueTrackingSystem.connectorMixin.getConfiguration('GITHUB_OWNER')}/${issueTrackingSystem.connectorMixin.getConfiguration('GITHUB_REPO')}`);
-  } else if (issueTrackingSystem instanceof JiraConnector) {
-    const issueData = await issueTrackingSystem.getIssue(issue);
-    issueTitle = issueData.summary;
-    issueDescription = issueData.description || "";
-    issueId = issueData.id;
-  } else if (issueTrackingSystem instanceof LinearConnector) {
-    const issueData = await issueTrackingSystem.getIssue(issue);
-    issueTitle = issueData.title;
-    issueDescription = issueData.description || "";
-    issueId = issueData.id;
-  } else if (issueTrackingSystem instanceof AsanaConnector) {
-    const taskData = await issueTrackingSystem.getTask(issue);
-    issueTitle = taskData.name;
-    issueDescription = taskData.description || "";
-    issueId = taskData.id;
-  } else if (issueTrackingSystem instanceof TrelloConnector) {
-    const cardData = await issueTrackingSystem.getCard(issue);
-    issueTitle = cardData.name;
-    issueDescription = cardData.description || ""; // Trello calls it 'desc' but our focused type calls it 'description'
-    issueId = cardData.id;
-  } else {
-    // This should not happen if issueTrackingSystem is correctly typed
-    throw new Error("Unsupported issue tracking system instance provided to scoreFile.");
-  }
+  // Use the normalized interface - no more instanceof checks!
+  const issueData = await issueTrackingSystem.getIssue(issue);
+  const issueTitle = issueData.title;
+  const issueDescription = issueData.description || "";
+  const issueId = String(issueData.id);
 
   if (issueDescription) {
     console.log(`
@@ -147,7 +128,7 @@ export async function scoreFile({
     console.log('Converting issue to cucumber format...');
 
     let issueToCucumberText: string | undefined;
-    const cucumberResponse = await llmConnector.cucumberFromString(issueDescription);
+    const cucumberResponse = await (llmConnector as any).cucumberFromString(issueDescription);
     if (llmConnector instanceof OpenAIConnector) {
       // Assuming cucumberResponse is an array with choices[0].message.content
       issueToCucumberText = (cucumberResponse as any)[0]?.message?.content;
@@ -165,7 +146,7 @@ export async function scoreFile({
     console.log(`Comparing... '${file}'`);
 
     console.log('Generating report...');
-    const compareResponse = await llmConnector.compareIssueToSourceCode({
+    const compareResponse = await (llmConnector as any).compareIssueToSourceCode({
       issue: issueToCucumberText,
       sourceCode: await readFile(resolve('.', file), 'utf8')
     });
@@ -195,8 +176,8 @@ export async function scoreFile({
 
   } else {
     throw new Error(`Issue body/description for #${issueId} is blank for ${issueTrackingSystem.id}, nothing to compare.`);
-  }
-}
+      }
+  
 
 // const jiraConnector = await new JiraConnector().getIssue(issue);
 
